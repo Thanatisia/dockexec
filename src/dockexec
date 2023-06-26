@@ -1,0 +1,287 @@
+#!/bin/env bash
+: "
+A docker execution CLI utility for streamlining and simpifying calling of executables and arguments in containers
+"
+
+## Global Variables
+### Project
+PROG_NAME="dockexec"
+PROG_VERS="v0.1.0"
+CONFIG_FILE_DIR=~/.config/$PROG_NAME
+CONFIG_FILE_NAME="config.sh"
+CONFIG_FILE=$CONFIG_FILE_DIR/$CONFIG_FILE_NAME
+
+### Application Defaults
+DEFAULT_CONTAINER_NAME="container-name"
+DEFAULT_SHELL="/bin/bash"
+available_services=("yt-dlp" "gallery-dl")
+
+## General Utilities
+display_help()
+{
+    ## Display Help message/message
+    echo -e "[Displaying Help]"
+    display_options
+    display_services
+}
+
+display_options()
+{
+    : "
+    Display all options
+    "
+    echo -e "All Options:"
+    opt_msg="$(cat <<EOF
+- Synopsis/Syntax
+    $0 {options}
+
+- Parameters
+    - Positionals
+
+    - Options
+        - With Arguments
+            - Execution
+                + service {options} : Manage/Handle all services in the container
+                    - Options
+                        + exec : Start/Begin executing the specified command/executable and arguments provided; Ensure that '--set-command' and '--set-command-args' is specified before this
+                        + ls : List all services; (WIP) Filter services
+            - General
+                + '--change-container <new-container-name>'               : Change and execute command to a new container; Might need to use '--change-shell' if the new container/image does not have your shell
+                + '--change-shell <new-shell-path>'                       : Change the current shell for the current instance
+                + '--set-command [utility-name]'                          : Set a command/binary to execute in the specified target container
+                + '--set-command-args <command-and-arguments-to-execute>' : Set the arguments you want to parse into the command/executable to execute in the specified target container
+        - Flags
+            - General
+                + --get-shell : Get the currently set default shell
+                + --get-container : Get the currently set default container
+                + -h | --help : Display this help message
+                + -v | --version : Display current program version
+
+- Usage
+    - Execute command after setting your options
+        $0 {options} service exec
+
+    - Execute commands in a different shell
+        $0 --change-shell /bin/{sh|zsh|fish} --set-command "your-executable" --set-command-args "your-arguments" {other-options} service exec
+
+    - Set command/executable and arguments to execute
+        $0 --set-command [yt-dlp|gallery-dl|your-executable-of-choice] --set-command-args [argument-to-parse] service exec
+EOF
+)"
+    echo -e "$opt_msg"
+}
+
+display_services()
+{
+    : "
+    Display all services
+    "
+    echo -e "All Services:"
+    for service_number in "${!available_services[@]}"; do
+        # Get current service
+        service_exec="${available_services[$service_number]}"
+
+        # Print out message
+        echo -e "\t$((service_number+1)) : $service_exec"
+    done
+}
+
+display_version()
+{
+    : "
+    Display system version
+    "
+    echo -e "Program Version: $PROG_VERS"
+}
+
+error()
+{
+    err_msg="$1"
+    echo -e "\n\t$err_msg\n"
+}
+
+check_arr_for_element()
+{
+    : "
+    Check if element is found in array
+    "
+    element="$1"
+    arr=("${@:2}")
+    res="false"
+
+    for curr in "${arr[@]}"; do
+        if [[ "$curr" == "$element" ]]; then
+            # found
+            res="true"
+        fi
+    done
+
+    # Return
+    echo "$res"
+}
+
+## Program/Application Utilities
+cli_exec()
+{
+    : "
+    Execute programs in the container
+    "
+    DOCKER_ARGS="-it"
+    SHELL_ARGS="-c"
+    CMD_STR="$1" # Command to Execute
+    echo -e "Executing... [$EXEC_SHELL $SHELL_ARGS $CMD_STR] => [$EXEC_CONTAINER_NAME]"
+    docker exec $DOCKER_ARGS "$EXEC_CONTAINER_NAME" "$EXEC_SHELL" $SHELL_ARGS "$CMD_STR"
+}
+
+## Main Body
+init()
+{
+    : "
+    Setup and Initialization of global variables and system settings
+    "
+
+    ## Check if directory exists
+    if [[ ! -d $CONFIG_FILE_DIR ]]; then
+        ## Does not Exists
+        error "Configuration folder [$CONFIG_FILE_DIR] does not exist, creating...]"
+        ## Create directory
+        mkdir -p $CONFIG_FILE_DIR
+    fi
+
+    ## Check if config file exists
+    if [[ ! -f $CONFIG_FILE ]]; then
+        ## Does not Exists
+        error "Configuration file [$CONFIG_FILE] does not exist, creating and setting defaults...]"
+        ### Application Defaults
+        contents="$(cat << EOF
+EXEC_CONTAINER_NAME="$DEFAULT_CONTAINER_NAME" # Your default target container name
+EXEC_SHELL="$DEFAULT_SHELL" # Your default shell
+EXEC_available_services=("executables" "here") # An array containing the services you know exists, not used for now
+EXEC_COMMAND="executable" # Set default command/executable to execute to the specified default container if you want to repeat
+EXEC_COMMAND_ARGS="arguments" # Set default arguments to parse into the executable to execute to the specified default container for repetition
+EOF
+)"
+        echo -e "$contents" | tee -a >> $CONFIG_FILE && \
+            echo -e "Defaults have been written to the configuration file, please edit the configuration file with the default values before proceeding."
+        exit 1
+    fi
+
+    ## Source config file
+    source $CONFIG_FILE
+}
+
+main()
+{
+    argv=("$@")
+    argc="${#argv[@]}"
+
+    # Check if argument is found
+    if [[ "$argc" -gt 0 ]]; then
+        ## Argument is found
+        ## Proceed to loop
+        while [[ "$1" != "" ]]; do
+            ## While there are still arguments
+
+            case "$1" in
+                "service")
+                    ## Manage/Handle all services in the container
+                    ## Check if arguments are found
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        case "$2" in
+                            "exec")
+                                ## Execute the CLI command
+                                cli_exec "$cmd_str $cmd_args"
+                                shift 1
+                                ;;
+                            "ls")
+                                ## List services
+                                display_services
+                                shift 1
+                                ;;
+                            *)
+                                # Invalid argument
+                                shift 1
+                                ;;
+                        esac
+                        shift 1
+                    else
+                        ## No arguments found
+                        error "Error: No arguments provided to $1"
+                    fi
+                    shift 1
+                    ;;
+                "--change-container")
+                    ## (WIP)
+                    ## Change and set to a new container
+                    ## Check if arguments are found
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        EXEC_CONTAINER_NAME="$2"
+                        shift 1
+                    fi
+                    shift 1
+                    ;;
+                "--get-container")
+                    ## Get currently set container
+                    echo -e "$EXEC_CONTAINER_NAME"
+                    shift 1
+                    ;;
+                "--change-shell")
+                    ## Change default shell
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        EXEC_SHELL="$2"
+                        shift 1
+                    fi
+                    shift 1
+                    ;;
+                "--get-shell")
+                    ## Get currently set shell
+                    echo -e "$EXEC_SHELL"
+                    shift 1
+                    ;;
+                "--set-command")
+                    ## Set target command/executable to execute
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        cmd_str="$2"
+                        shift 1
+                    fi
+                    shift 1
+                    ;;
+                "--set-command-args")
+                    ## Set target command arguments to execute
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        cmd_args="$2"
+                        shift 1
+                    fi
+                    shift 1
+                    ;;
+                "-h" | "--help")
+                    ## Display help message
+                    display_help
+                    shift 1
+                    ;;
+                "-v" | "--version")
+                    ## Display system version information
+                    display_version
+                    shift 1
+                    ;;
+                *)
+                    ## Invalid argument
+                    error "Invalid argument [$1] provided."
+                    shift 1
+                    ;;
+            esac
+        done
+    else
+        error "Error: No arguments provided."
+    fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    init
+    main "$@"
+fi
