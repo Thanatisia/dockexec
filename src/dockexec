@@ -25,6 +25,24 @@ display_help()
     display_services
 }
 
+generate_cfg_file()
+{
+    : "
+    Generate configuration file
+    "
+    ### Application Defaults
+    contents="$(cat << EOF
+EXEC_CONTAINER_NAME="$DEFAULT_CONTAINER_NAME" # Your default target container name
+EXEC_SHELL="$DEFAULT_SHELL" # Your default shell
+EXEC_available_services=("executables" "here") # An array containing the services you know exists, not used for now
+EXEC_COMMAND="executable" # Set default command/executable to execute to the specified default container if you want to repeat
+EXEC_COMMAND_ARGS="arguments" # Set default arguments to parse into the executable to execute to the specified default container for repetition
+EOF
+)"
+    echo -e "$contents" | tee -a >> $CONFIG_FILE && \
+        echo -e "Defaults have been written to the configuration file, please edit the configuration file with the default values before proceeding."
+}
+
 display_options()
 {
     : "
@@ -43,19 +61,23 @@ display_options()
             - Execution
                 + service {options} : Manage/Handle all services in the container
                     - Options
-                        + exec : Start/Begin executing the specified command/executable and arguments provided; Ensure that '--set-command' and '--set-command-args' is specified before this
-                        + ls : List all services; (WIP) Filter services
+                        + exec        : Start/Begin executing the specified command/executable and arguments provided; Ensure that '--set-command' and '--set-command-args' is specified before this
+                        + ls          : List all services; (WIP) Filter services
+                        + -h | --help : Display help for 'dockexec service'
             - General
-                + '--change-container <new-container-name>'               : Change and execute command to a new container; Might need to use '--change-shell' if the new container/image does not have your shell
-                + '--change-shell <new-shell-path>'                       : Change the current shell for the current instance
-                + '--set-command [utility-name]'                          : Set a command/binary to execute in the specified target container
-                + '--set-command-args <command-and-arguments-to-execute>' : Set the arguments you want to parse into the command/executable to execute in the specified target container
+                + '-f [custom-file-name] | --import-file [custom-file-name]' : Import a custom configuration file; Must be placed at the front to ensure it is sourced first
+                + '--change-container <new-container-name>'                  : Change and execute command to a new container; Might need to use '--change-shell' if the new container/image does not have your shell
+                + '--change-shell <new-shell-path>'                          : Change the current shell for the current instance
+                + '--set-command [utility-name]'                             : Set a command/binary to execute in the specified target container
+                + '--set-command-args <command-and-arguments-to-execute>'    : Set the arguments you want to parse into the command/executable to execute in the specified target container
         - Flags
             - General
-                + --get-shell : Get the currently set default shell
-                + --get-container : Get the currently set default container
-                + -h | --help : Display this help message
-                + -v | --version : Display current program version
+                + --get-shell        : Get the currently set default shell
+                + --get-container    : Get the currently set default container
+                + --get-command-args : Get the current default argument to parse into command/executable
+                + --get-container    : Get the currently set default container
+                + -h | --help        : Display this help message
+                + -v | --version     : Display current program version
 
 - Usage
     - Execute command after setting your options
@@ -98,6 +120,9 @@ error()
 {
     err_msg="$1"
     echo -e "\n\t$err_msg\n"
+
+    # Exit code
+    exit 1
 }
 
 check_arr_for_element()
@@ -121,6 +146,18 @@ check_arr_for_element()
 }
 
 ## Program/Application Utilities
+cli_copy()
+{
+    : "
+    Streamling copying files from container volume to host volume
+    "
+    CONTAINER_VOLUME_PATH="$1" # Target path to copy in the container from the host
+    HOST_DST_PATH="$2" # Destination path to copy from the container to the host
+    DOCKER_ARGS="$3"
+    echo -e "Copying from [$CONTAINER_VOLUME_PATH] => [$HOST_DST_PATH]..."
+    docker cp $DOCKER_ARGS $EXEC_CONTAINER_NAME:$CONTAINER_VOLUME_PATH $HOST_DST_PATH
+}
+
 cli_exec()
 {
     : "
@@ -139,7 +176,6 @@ init()
     : "
     Setup and Initialization of global variables and system settings
     "
-
     ## Check if directory exists
     if [[ ! -d $CONFIG_FILE_DIR ]]; then
         ## Does not Exists
@@ -152,17 +188,7 @@ init()
     if [[ ! -f $CONFIG_FILE ]]; then
         ## Does not Exists
         error "Configuration file [$CONFIG_FILE] does not exist, creating and setting defaults...]"
-        ### Application Defaults
-        contents="$(cat << EOF
-EXEC_CONTAINER_NAME="$DEFAULT_CONTAINER_NAME" # Your default target container name
-EXEC_SHELL="$DEFAULT_SHELL" # Your default shell
-EXEC_available_services=("executables" "here") # An array containing the services you know exists, not used for now
-EXEC_COMMAND="executable" # Set default command/executable to execute to the specified default container if you want to repeat
-EXEC_COMMAND_ARGS="arguments" # Set default arguments to parse into the executable to execute to the specified default container for repetition
-EOF
-)"
-        echo -e "$contents" | tee -a >> $CONFIG_FILE && \
-            echo -e "Defaults have been written to the configuration file, please edit the configuration file with the default values before proceeding."
+        generate_cfg_file
         exit 1
     fi
 
@@ -181,7 +207,6 @@ main()
         ## Proceed to loop
         while [[ "$1" != "" ]]; do
             ## While there are still arguments
-
             case "$1" in
                 "service")
                     ## Manage/Handle all services in the container
@@ -191,17 +216,19 @@ main()
                         case "$2" in
                             "exec")
                                 ## Execute the CLI command
-                                cli_exec "$cmd_str $cmd_args"
-                                shift 1
+                                cli_exec "$EXEC_COMMAND $EXEC_COMMAND_ARGS"
                                 ;;
                             "ls")
                                 ## List services
                                 display_services
-                                shift 1
+                                ;;
+                            "-h" | "--help")
+                                ## Display help message with service
+                                display_help
                                 ;;
                             *)
                                 # Invalid argument
-                                shift 1
+                                error "Invalid service argument [$2] provided."
                                 ;;
                         esac
                         shift 1
@@ -246,8 +273,24 @@ main()
                     if [[ "$2" != "" ]]; then
                         ## Arguments found
                         cmd_str="$2"
+
+                        ## Populate EXEC_COMMAND
+                        EXEC_COMMAND="$cmd_str"
+                        
+                        ## Remove default argument if '--set-command-args' is empty so that there's no unnecessary options parsed
+                        if [[ "$cmd_args" == "" ]]; then
+                            ## Argument is set explicitly
+                            EXEC_COMMAND_ARGS=""
+                        fi
                         shift 1
+                    else
+                        error "No executable/command provided."
                     fi
+                    shift 1
+                    ;;
+                "--get-command")
+                    ## Get current default command/executable
+                    echo -e "$EXEC_COMMAND"
                     shift 1
                     ;;
                 "--set-command-args")
@@ -255,7 +298,37 @@ main()
                     if [[ "$2" != "" ]]; then
                         ## Arguments found
                         cmd_args="$2"
+
+                        ## Populate EXEC_COMMAND_ARGS
+                        EXEC_COMMAND_ARGS="$cmd_args"
                         shift 1
+                    else
+                        error "No executable/command arguments provided."
+                    fi
+                    shift 1
+                    ;;
+                "--get-command-args")
+                    ## Get current default arguments to parse into command/executable
+                    echo -e "$EXEC_COMMAND_ARGS"
+                    shift 1
+                    ;;
+                "-f" | "--import-cfg")
+                    ## Import custom configuration file
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        cfg_file="$2"
+
+                        ## Check if configuration file exists
+                        if [[ -f $cfg_file ]]; then
+                            ## File exists
+                            source $cfg_file
+                        else
+                            error "Configuration file [$cfg_file] does not exist"
+                            exit 1
+                        fi
+                        shift 1
+                    else
+                        error "No configuration file provided."
                     fi
                     shift 1
                     ;;
@@ -279,6 +352,9 @@ main()
     else
         error "Error: No arguments provided."
     fi
+
+    # All good
+    exit 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
