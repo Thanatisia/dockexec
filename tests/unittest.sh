@@ -146,7 +146,7 @@ test_multi_command()
     Test inputting multiple commands
     "
     # Initialize Variables
-    cmd_str="./$SRC_FILE service exec --set-command echo --set-command-args Hello service exec"
+    cmd_str="./$SRC_FILE --set-command df --set-command-args -h service exec --set-command echo --set-command-args Hello service exec"
     VERBOSE=false
     test_title="test multiple commands"
 
@@ -163,6 +163,50 @@ test_multi_command()
     assert "$res" "$test_title" "$cmd_str"   
 }
 
+test_file_exec()
+{
+    : "
+    Test executing all commands specified in a commands list
+    "
+    cmd_str="./$SRC_FILE --from-file --set-commands-list ./test_config/dockexec/commands.list service exec"
+    VERBOSE=false
+    test_title="test commands list file execution"
+
+    if [[ "$VERBOSE" == true ]]; then
+        # Execute command with output
+        $cmd_str
+    else
+        # Execute command without output
+        $cmd_str > /dev/null
+    fi
+
+    # Get result
+    res="$?"
+    assert "$res" "$test_title" "$cmd_str"
+}
+
+test_file_exec_default()
+{
+    : "
+    Test executing all commands specified in a commands list
+    "
+    cmd_str="./$SRC_FILE --from-file service exec"
+    VERBOSE=false
+    test_title="test default commands list file execution"
+
+    if [[ "$VERBOSE" == true ]]; then
+        # Execute command with output
+        $cmd_str
+    else
+        # Execute command without output
+        $cmd_str > /dev/null
+    fi
+
+    # Get result
+    res="$?"
+    assert "$res" "$test_title" "$cmd_str"
+}
+
 main()
 {
     test_help
@@ -171,6 +215,8 @@ main()
     test_different_shell
     test_error
     test_multi_command
+    test_file_exec
+    test_file_exec_default
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
