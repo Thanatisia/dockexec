@@ -13,7 +13,7 @@ however, I saw that you could run docker exec and get an output as though it is 
 ```
 ### Program
 + Program Name: dockexec
-+ Program Version: v0.2.0
++ Program Version: v0.2.1
 - Configuration
     + Directory: ~/.config/dockexec
     + File: config.sh
@@ -26,10 +26,20 @@ however, I saw that you could run docker exec and get an output as though it is 
 + Some basic internal docker functionalities/understanding
 
 ### Installation
-+ Makefile is in work-in-progress
+- Makefile
+    ```console
+    sudo make install
+    ```
+
 - Manually
     ```console
     install 0755 src/dockexec /usr/local/bin/
+    ```
+
+### Uninstallation
+- Makefile
+    ```console
+    sudo make uninstall
     ```
 
 ### Configuration
@@ -82,6 +92,16 @@ however, I saw that you could run docker exec and get an output as though it is 
 - Set command/executable and arguments to execute
     ```console
     dockexec --set-command [yt-dlp|gallery-dl|your-executable-of-choice] --set-command-args [argument-to-parse] service exec
+    ```
+
+- Execute commands from a command list
+    ```console
+    dockexec --from-list --set-commands-list /path/to/commands.list service exec
+    ```
+
+- Execute commands from the default command list
+    ```console
+    dockexec --from-list service exec
     ```
 
 ## Wiki
@@ -148,16 +168,18 @@ however, I saw that you could run docker exec and get an output as though it is 
 + EXEC_available_services=("executables" "here") : An array containing the services you know exists, not used for now
 + EXEC_COMMAND=""                                : Set default command/executable to execute to the specified default container if you want to repeat
 + EXEC_COMMAND_ARGS=""                           : Set default arguments to parse into the executable to execute to the specified default container for repetition
++ EXEC_FILE="your-commands-list-file-here"       : Set your commands list file here; Place all commands you want to execute in the container in this file
 
 ### TODO-List and Pipeline
 #### Open
 + [] Migration and implementation in a compiled-language like C/C++/Rust instead of Interpreted to improve running time + portability
 #### Ongoing
-+ [] Implement 'docker cp' support
 #### Completed
 + [X] Create a Makefile installer
 + [X] Custom configuration file import
 + [X] Implementing default command/executable and default arguments to execute if '--set-command' and '--set-command-args' are not set.
++ [X] Implement specifying of commands file containing the commands to execute in a container
++ [X] Implement 'docker copy' support
 
 ### Developer's Notes
 - 2023-06-26 1124H: At the moment, I have implemented inter/cross-container support. 

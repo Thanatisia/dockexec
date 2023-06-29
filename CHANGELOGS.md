@@ -3,6 +3,7 @@
 ## Version History
 + 2023-06-26 1113H : v0.1.0 
 + 2023-06-29 1529H : v0.2.0
++ 2023-06-29 2319H : v0.2.1
 
 ## v0.1.0
 - Initial Commit
@@ -21,3 +22,8 @@
     - Explicitly setting custom arguments to parse into the command/executable
     - Getting default command
     - Getting default command argument
+    
+## v0.2.1
+- Implemented specifying a commands list/file and 
+    - executing all executables/commands (and their arguments) specified in the file.
+- Implemented copy option for 'docker cp' compatibility

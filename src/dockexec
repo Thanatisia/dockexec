@@ -6,7 +6,7 @@ A docker execution CLI utility for streamlining and simpifying calling of execut
 ## Global Variables
 ### Project
 PROG_NAME="dockexec"
-PROG_VERS="v0.1.0"
+PROG_VERS="v0.2.1"
 CONFIG_FILE_DIR=~/.config/$PROG_NAME
 CONFIG_FILE_NAME="config.sh"
 CONFIG_FILE=$CONFIG_FILE_DIR/$CONFIG_FILE_NAME
@@ -37,6 +37,7 @@ EXEC_SHELL="$DEFAULT_SHELL" # Your default shell
 EXEC_available_services=("executables" "here") # An array containing the services you know exists, not used for now
 EXEC_COMMAND="executable" # Set default command/executable to execute to the specified default container if you want to repeat
 EXEC_COMMAND_ARGS="arguments" # Set default arguments to parse into the executable to execute to the specified default container for repetition
+EXEC_FILE="your-commands-list-file-here" # Set your commands list file here; Place all commands you want to execute in the container in this file
 EOF
 )"
     echo -e "$contents" | tee -a >> $CONFIG_FILE && \
@@ -61,23 +62,31 @@ display_options()
             - Execution
                 + service {options} : Manage/Handle all services in the container
                     - Options
-                        + exec        : Start/Begin executing the specified command/executable and arguments provided; Ensure that '--set-command' and '--set-command-args' is specified before this
-                        + ls          : List all services; (WIP) Filter services
-                        + -h | --help : Display help for 'dockexec service'
+                        - With Arguments
+                        - Flags
+                            + copy        : Copy files to and from container and host system volumes
+                            + exec        : Start/Begin executing the specified command/executable and arguments provided
+                            + ls          : List all services; (WIP) Filter services
+                            + -h | --help : Display help for 'dockexec service'
             - General
-                + '-f [custom-file-name] | --import-file [custom-file-name]' : Import a custom configuration file; Must be placed at the front to ensure it is sourced first
+                + '-f [custom-file-name] | --import-cfg [custom-file-name]'  : Import a custom configuration file; Must be placed at the front to ensure it is sourced first
                 + '--change-container <new-container-name>'                  : Change and execute command to a new container; Might need to use '--change-shell' if the new container/image does not have your shell
                 + '--change-shell <new-shell-path>'                          : Change the current shell for the current instance
                 + '--set-command [utility-name]'                             : Set a command/binary to execute in the specified target container
                 + '--set-command-args <command-and-arguments-to-execute>'    : Set the arguments you want to parse into the command/executable to execute in the specified target container
+                + '--set-commands-list [commands-list-file]'                 : Specify target commands list file to execute; Overrides the environment variable 'EXEC_FILE'; Omit this to use the default file name specified in the configuration file
+                + '--set-container-path [container-volume-path]'             : Specify a target container path; As per requirements for 'docker cp', please specify the full file path
+                + '--set-host-path [host-system-volume-path]'                : Specify a target host system volume path
         - Flags
             - General
-                + --get-shell        : Get the currently set default shell
-                + --get-container    : Get the currently set default container
-                + --get-command-args : Get the current default argument to parse into command/executable
-                + --get-container    : Get the currently set default container
-                + -h | --help        : Display this help message
-                + -v | --version     : Display current program version
+                + --from-file         : Execute all commands specified in the commands file
+                + --get-shell         : Get the currently set default shell
+                + --get-command       : Get the current default command/executable
+                + --get-command-args  : Get the current default argument to parse into command/executable
+                + --get-commands-list : Get the current default commands list path
+                + --get-container     : Get the currently set default container
+                + -h | --help         : Display this help message
+                + -v | --version      : Display current program version
 
 - Usage
     - Execute command after setting your options
@@ -88,6 +97,12 @@ display_options()
 
     - Set command/executable and arguments to execute
         $0 --set-command [yt-dlp|gallery-dl|your-executable-of-choice] --set-command-args [argument-to-parse] service exec
+
+    - Execute commands from a commands list file
+        $0 --from-file --set-commands-list /path/to/the/commands.list service exec
+
+    - Execute commands from the default commands list file specified in the configuration file
+        $0 --from-file service exec
 EOF
 )"
     echo -e "$opt_msg"
@@ -143,6 +158,58 @@ check_arr_for_element()
 
     # Return
     echo "$res"
+}
+
+exec_from_file()
+{
+    : "
+    Read from file and execute commands in it
+    "
+    # Initialize Variables
+    cmds=()
+    cmd_exec="" # Command to execute
+    DOCKER_ARGS="-it"
+    SHELL_ARGS="-c"
+    separator="&&"
+
+    # Get command line arguments
+    cmd_file="$1"
+
+    # Read command/executables from file into array
+    readarray -t cmds < $cmd_file
+
+    # Format command string
+    cmd_size="${#cmds[@]}"
+
+    # Check if content has a empty trailing whitespace
+    last_element_ID=$((cmd_size - 1))
+    last_element="${cmds[$last_element_ID]}"
+    if [[ "$last_element" == "" ]]; then
+        # Trailing whitespace
+        # Exit
+        echo -e "Error: Please remove the empty newline at the bottom of the file [$cmd_file] before starting."
+        exit 1
+    fi
+
+    # No issues
+    for cmd_num in "${!cmds[@]}"; do
+        # Get current command
+        curr_cmd="${cmds[$cmd_num]}"
+
+        # Format and join
+
+        # Check if current queue is the last element
+        if [[ ! $cmd_num -eq $((cmd_size - 1)) ]]; then
+            # If is not the last element
+            cmd_exec+="$curr_cmd $separator "
+        else
+            # Last element
+            cmd_exec+="$curr_cmd"
+        fi
+    done
+
+    # Execute commands into container
+    docker exec $DOCKER_ARGS "$EXEC_CONTAINER_NAME" "$EXEC_SHELL" $SHELL_ARGS "$cmd_exec"
 }
 
 ## Program/Application Utilities
@@ -201,6 +268,12 @@ main()
     argv=("$@")
     argc="${#argv[@]}"
 
+    # Initialize Variables
+    declare -A opts=(
+        # Current session options
+        # [key]="value"
+    )
+
     # Check if argument is found
     if [[ "$argc" -gt 0 ]]; then
         ## Argument is found
@@ -214,9 +287,22 @@ main()
                     if [[ "$2" != "" ]]; then
                         ## Arguments found
                         case "$2" in
+                            "copy")
+                                ## Copy files to and from container and host system volumes
+                                cli_copy "$target_container_path" "$target_host_path"
+                                ;;
                             "exec")
-                                ## Execute the CLI command
-                                cli_exec "$EXEC_COMMAND $EXEC_COMMAND_ARGS"
+                                ## Check if options are enabled
+                                if [[ "${opts["--from-file"]}" == true ]]; then
+                                    ## Execute command from a file instead of specified
+                                    exec_from_file "$EXEC_FILE"
+
+                                    # Reset
+                                    opts["--from-file"]=false
+                                else
+                                    ## Execute the CLI command
+                                    cli_exec "$EXEC_COMMAND $EXEC_COMMAND_ARGS"
+                                fi
                                 ;;
                             "ls")
                                 ## List services
@@ -329,6 +415,68 @@ main()
                         shift 1
                     else
                         error "No configuration file provided."
+                    fi
+                    shift 1
+                    ;;
+                "--set-commands-list")
+                    ## Specify the commands list to execute; Use with '--from-file' to override and execute all commands from a file instead
+                    ### Initialize Variables
+                    cmds_file=""
+                    ### Get commands file
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        ## Check if file exists
+                        if [[ -f "$2" ]]; then
+                            ## File exists
+                            cmds_file="$2"
+
+                            EXEC_FILE="$cmds_file"
+                        else
+                            ## File does not exist
+                            error "Commands file [$2] does not exist."
+                        fi
+                        shift 1
+                    else
+                        ## File not provided
+                        error "Commands file not provided."
+                    fi
+                    shift 1
+                    ;;
+                "--get-commands-list")
+                    ## Get the default commands list
+                    echo -e "$EXEC_FILE"
+                    shift 1
+                    ;;
+                "--from-file")
+                    ## Execute command from a file instead of specified options
+                    opts["--from-file"]=true
+                    shift 1
+                    ;;
+                "--set-container-path")
+                    ## Specify a target container path
+                    target_container_path=""
+                    ### Get commands file
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        target_container_path="$2"
+                        shift 1
+                    else
+                        ## File not provided
+                        error "Container path not provided."
+                    fi
+                    shift 1
+                    ;;
+                "--set-host-path")
+                    ## Specify a target host system volume path
+                    target_host_path=""
+                    ### Get commands file
+                    if [[ "$2" != "" ]]; then
+                        ## Arguments found
+                        target_host_path="$2"
+                        shift 1
+                    else
+                        ## File not provided
+                        error "Host path not provided."
                     fi
                     shift 1
                     ;;
