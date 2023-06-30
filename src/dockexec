@@ -332,6 +332,8 @@ main()
                         ## Arguments found
                         EXEC_CONTAINER_NAME="$2"
                         shift 1
+                    else
+                        error "Container not specified."
                     fi
                     shift 1
                     ;;
