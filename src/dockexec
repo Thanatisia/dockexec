@@ -246,7 +246,7 @@ init()
     ## Check if directory exists
     if [[ ! -d $CONFIG_FILE_DIR ]]; then
         ## Does not Exists
-        error "Configuration folder [$CONFIG_FILE_DIR] does not exist, creating...]"
+        echo -e "Configuration folder [$CONFIG_FILE_DIR] does not exist, creating..."
         ## Create directory
         mkdir -p $CONFIG_FILE_DIR
     fi
@@ -254,7 +254,7 @@ init()
     ## Check if config file exists
     if [[ ! -f $CONFIG_FILE ]]; then
         ## Does not Exists
-        error "Configuration file [$CONFIG_FILE] does not exist, creating and setting defaults...]"
+        echo -e "Configuration file [$CONFIG_FILE] does not exist, creating and setting defaults..."
         generate_cfg_file
         exit 1
     fi
